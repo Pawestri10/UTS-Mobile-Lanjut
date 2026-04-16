@@ -18,7 +18,9 @@ package com.example.unscramble.ui
 import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -28,10 +30,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.MaterialTheme.shapes
 import androidx.compose.material3.MaterialTheme.typography
@@ -43,6 +49,10 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,79 +61,118 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.unscramble.R
+import com.example.unscramble.UnscrambleApplication
 import com.example.unscramble.ui.theme.UnscrambleTheme
+import kotlinx.coroutines.launch
 
 @Composable
-fun GameScreen(gameViewModel: GameViewModel = viewModel()) {
+fun GameScreen() {
+    val context = LocalContext.current
+    val application = context.applicationContext as UnscrambleApplication
+    val gameViewModel: GameViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return GameViewModel(application) as T
+            }
+        }
+    )
+
     val gameUiState by gameViewModel.uiState.collectAsState()
     val mediumPadding = dimensionResource(R.dimen.padding_medium)
+    var showAddWordDialog by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .safeDrawingPadding()
-            .padding(mediumPadding),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-
-        Text(
-            text = stringResource(R.string.app_name),
-            style = typography.titleLarge,
-        )
-        GameLayout(
-            onUserGuessChanged = { gameViewModel.updateUserGuess(it) },
-            wordCount = gameUiState.currentWordCount,
-            userGuess = gameViewModel.userGuess,
-            onKeyboardDone = { gameViewModel.checkUserGuess() },
-            currentScrambledWord = gameUiState.currentScrambledWord,
-            isGuessWrong = gameUiState.isGuessedWordWrong,
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .padding(mediumPadding)
-        )
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .statusBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .safeDrawingPadding()
                 .padding(mediumPadding),
-            verticalArrangement = Arrangement.spacedBy(mediumPadding),
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { gameViewModel.checkUserGuess() }
+            Text(
+                text = stringResource(R.string.app_name),
+                style = typography.titleLarge,
+            )
+            GameLayout(
+                onUserGuessChanged = { gameViewModel.updateUserGuess(it) },
+                wordCount = gameUiState.currentWordCount,
+                userGuess = gameViewModel.userGuess,
+                onKeyboardDone = { gameViewModel.checkUserGuess() },
+                currentScrambledWord = gameUiState.currentScrambledWord,
+                isGuessWrong = gameUiState.isGuessedWordWrong,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+                    .padding(mediumPadding)
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(mediumPadding),
+                verticalArrangement = Arrangement.spacedBy(mediumPadding),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = stringResource(R.string.submit),
-                    fontSize = 16.sp
-                )
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { gameViewModel.checkUserGuess() }
+                ) {
+                    Text(
+                        text = stringResource(R.string.submit),
+                        fontSize = 16.sp
+                    )
+                }
+                OutlinedButton(
+                    onClick = { gameViewModel.skipWord() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.skip),
+                        fontSize = 16.sp
+                    )
+                }
             }
-
-            OutlinedButton(
-                onClick = { gameViewModel.skipWord() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = stringResource(R.string.skip),
-                    fontSize = 16.sp
+            GameStatus(score = gameUiState.score, modifier = Modifier.padding(20.dp))
+            if (gameUiState.isGameOver) {
+                FinalScoreDialog(
+                    score = gameUiState.score,
+                    onPlayAgain = { gameViewModel.resetGame() }
                 )
             }
         }
 
-        GameStatus(score = gameUiState.score, modifier = Modifier.padding(20.dp))
+        FloatingActionButton(
+            onClick = { showAddWordDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+            containerColor = colorScheme.primary,
+            contentColor = colorScheme.onPrimary
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Tambah Kata"
+            )
+        }
 
-        if (gameUiState.isGameOver) {
-            FinalScoreDialog(
-                score = gameUiState.score,
-                onPlayAgain = { gameViewModel.resetGame() }
+        if (showAddWordDialog) {
+            val scope = rememberCoroutineScope()
+
+            AddWordDialog(
+                onDismiss = { showAddWordDialog = false },
+                onConfirm = { original, scrambled ->
+                    scope.launch {
+                        gameViewModel.addNewWord(original, scrambled)
+                    }
+                    showAddWordDialog = false
+                }
             )
         }
     }
@@ -139,7 +188,6 @@ fun GameStatus(score: Int, modifier: Modifier = Modifier) {
             style = typography.headlineMedium,
             modifier = Modifier.padding(8.dp)
         )
-
     }
 }
 
@@ -213,9 +261,6 @@ fun GameLayout(
     }
 }
 
-/*
- * Creates and shows an AlertDialog with final score.
- */
 @Composable
 private fun FinalScoreDialog(
     score: Int,
@@ -225,11 +270,7 @@ private fun FinalScoreDialog(
     val activity = (LocalContext.current as Activity)
 
     AlertDialog(
-        onDismissRequest = {
-            // Dismiss the dialog when the user clicks outside the dialog or on the back
-            // button. If you want to disable that functionality, simply use an empty
-            // onCloseRequest.
-        },
+        onDismissRequest = { },
         title = { Text(text = stringResource(R.string.congratulations)) },
         text = { Text(text = stringResource(R.string.you_scored, score)) },
         modifier = modifier,
@@ -250,10 +291,69 @@ private fun FinalScoreDialog(
     )
 }
 
-@Preview(showBackground = true)
 @Composable
-fun GameScreenPreview() {
-    UnscrambleTheme {
-        GameScreen()
-    }
+fun AddWordDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
+    var originalWord by remember { mutableStateOf("") }
+    var scrambledWord by remember { mutableStateOf("") }
+    var showError by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Tambah Kata Baru") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = originalWord,
+                    onValueChange = {
+                        originalWord = it
+                        showError = false
+                    },
+                    label = { Text("Kata Asli") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = showError && originalWord.isEmpty()
+                )
+                OutlinedTextField(
+                    value = scrambledWord,
+                    onValueChange = {
+                        scrambledWord = it
+                        showError = false
+                    },
+                    label = { Text("Kata Acak") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = showError && scrambledWord.isEmpty()
+                )
+                if (showError) {
+                    Text(
+                        text = "Semua field harus diisi!",
+                        color = colorScheme.error,
+                        style = typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (originalWord.isNotBlank() && scrambledWord.isNotBlank()) {
+                        onConfirm(originalWord, scrambledWord)
+                    } else {
+                        showError = true
+                    }
+                }
+            ) {
+                Text("Simpan")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal")
+            }
+        }
+    )
 }
